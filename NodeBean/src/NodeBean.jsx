@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 import { Browser } from "@capacitor/browser";
 import { App as CapApp } from "@capacitor/app";
+import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 
 // ─── Ionic CSS (CDN via @import in style tag) ──────────────────────────────
 const IonicStyles = () => (
@@ -610,6 +611,37 @@ const IonicStyles = () => (
     .qr-img-wrap img { width: 100%; height: 100%; }
     .trace-key-big { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--muted); text-align: center; background: #f8f7f6; border-radius: 8px; padding: 8px 14px; border: 1px solid var(--border); word-break: break-all; }
     .open-page-btn { width: 100%; background: #1a1208; color: white; border: none; border-radius: var(--radius); padding: 14px; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+    /* ─── FOTOS ──────────────────────────────────── */
+    .photos-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .photo-thumb { aspect-ratio: 1; border-radius: 10px; overflow: hidden; position: relative; background: #f3f0ed; cursor: pointer; }
+    .photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .photo-thumb .photo-delete { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; background: rgba(0,0,0,0.6); border-radius: 50%; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; color: white; font-size: 12px; }
+    .photo-add-btn { aspect-ratio: 1; border-radius: 10px; border: 2px dashed var(--border); background: #f8f7f6; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; transition: all 0.2s; }
+    .photo-add-btn:hover { border-color: var(--primary); background: var(--primary-light); }
+    .photo-add-btn span { font-size: 10px; font-weight: 700; color: var(--muted); }
+    .photo-lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 300; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .photo-lightbox img { max-width: 100%; max-height: 85dvh; border-radius: 12px; object-fit: contain; }
+    .photo-lightbox-close { position: absolute; top: 16px; right: 16px; width: 40px; height: 40px; background: rgba(255,255,255,0.15); border: none; border-radius: 50%; color: white; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+    /* ─── SECADO ─────────────────────────────────── */
+    .humidity-ring { position: relative; display: flex; align-items: center; justify-content: center; }
+    .humidity-label-center { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .metodo-btn { flex: 1; padding: 12px 8px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: white; font-family: inherit; cursor: pointer; text-align: center; transition: all 0.2s; }
+    .metodo-btn.selected { border-color: var(--primary); background: var(--primary-light); }
+    .metodo-icon { font-size: 22px; display: block; margin-bottom: 4px; }
+    .metodo-name { font-size: 12px; font-weight: 800; color: var(--text); }
+    .metodo-btn.selected .metodo-name { color: var(--primary); }
+    .day-stat-card { background: white; border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; }
+    .day-stat-label { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; display: flex; align-items: center; gap: 5px; }
+    .day-stat-input { background: none; border: none; outline: none; font-family: inherit; font-size: 22px; font-weight: 800; color: var(--text); width: 100%; }
+    .day-stat-unit { font-size: 13px; color: var(--muted); font-weight: 600; }
+    .humidity-ok { color: var(--success); }
+    .humidity-warn { color: #f59e0b; }
+    .humidity-high { color: #dc2626; }
+    .completed-banner { background: linear-gradient(135deg, #f0fdf4, #dcfce7); border: 1.5px solid rgba(22,163,74,0.25); border-radius: var(--radius); padding: 20px; display: flex; align-items: center; gap: 14px; }
+    .completed-icon { width: 48px; height: 48px; border-radius: 50%; background: var(--success); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
   `}</style>
 );
 
@@ -640,6 +672,7 @@ const BottomNav = ({ active, onChange }) => {
   const tabs = [
     { id: "panel", icon: "dashboard", label: "Inicio" },
     { id: "fermentacion", icon: "inventory_2", label: "Proceso" },
+    { id: "secado", icon: "wb_sunny", label: "Secado" },
     { id: "inventario", icon: "analytics", label: "Almacén" },
     { id: "registro", icon: "agriculture", label: "Registro" },
     { id: "parcelas", icon: "grid_view", label: "Parcelas" },
@@ -815,6 +848,136 @@ const Panel = ({ navigate, profile, lots }) => {
   );
 };
 
+// ─── GALERÍA DE FOTOS ──────────────────────────────────────────────────────────
+const PhotoGallery = ({ lotId, etapa, showToast }) => {
+  const [photos, setPhotos] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [lightbox, setLightbox] = useState(null);
+  const isNative = !!(window.Capacitor?.isNativePlatform?.());
+
+  const cargarFotos = useCallback(async () => {
+    if (!lotId) return;
+    const { data } = await supabase
+      .from("lot_photos")
+      .select("*")
+      .eq("lot_id", lotId)
+      .eq("stage", etapa)
+      .order("created_at");
+    setPhotos(data || []);
+  }, [lotId, etapa]);
+
+  useEffect(() => { cargarFotos(); }, [cargarFotos]);
+
+  const tomarFoto = async () => {
+    try {
+      let base64 = null;
+      let mimeType = "image/jpeg";
+
+      if (isNative) {
+        // Dispositivo móvil: usar cámara nativa
+        const image = await Camera.getPhoto({
+          quality: 75,
+          allowEditing: false,
+          resultType: CameraResultType.Base64,
+          source: CameraSource.Prompt,
+        });
+        base64 = image.base64String;
+        mimeType = "image/" + (image.format || "jpeg");
+      } else {
+        // Web: input file
+        base64 = await new Promise((resolve) => {
+          const input = document.createElement("input");
+          input.type = "file";
+          input.accept = "image/*";
+          input.capture = "environment";
+          input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) { resolve(null); return; }
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result.split(",")[1]);
+            reader.readAsDataURL(file);
+          };
+          input.click();
+        });
+        if (!base64) return;
+      }
+
+      setUploading(true);
+      const fileName = `${lotId}/${etapa}/${Date.now()}.jpg`;
+      const byteArray = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+
+      const { error: upError } = await supabase.storage
+        .from("lot-photos")
+        .upload(fileName, byteArray, { contentType: mimeType, upsert: false });
+
+      if (upError) { showToast("Error al subir foto"); setUploading(false); return; }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from("lot-photos")
+        .getPublicUrl(fileName);
+
+      await supabase.from("lot_photos").insert({
+        lot_id: lotId,
+        stage: etapa,
+        url: publicUrl,
+        file_path: fileName,
+      });
+
+      setUploading(false);
+      cargarFotos();
+      showToast("✓ Foto guardada");
+    } catch (e) {
+      console.error(e);
+      setUploading(false);
+      showToast("Error al tomar foto");
+    }
+  };
+
+  const eliminarFoto = async (photo) => {
+    await supabase.storage.from("lot-photos").remove([photo.file_path]);
+    await supabase.from("lot_photos").delete().eq("id", photo.id);
+    setPhotos(p => p.filter(x => x.id !== photo.id));
+    showToast("Foto eliminada");
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <div className="field-label" style={{ margin: 0 }}>
+          📸 Fotos del proceso
+        </div>
+        <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>{photos.length} foto{photos.length !== 1 ? "s" : ""}</span>
+      </div>
+
+      <div className="photos-grid">
+        {photos.map(p => (
+          <div key={p.id} className="photo-thumb" onClick={() => setLightbox(p.url)}>
+            <img src={p.url} alt="proceso" loading="lazy" />
+            <button className="photo-delete" onClick={e => { e.stopPropagation(); eliminarFoto(p); }}>
+              <Icon name="close" style={{ fontSize: 12 }} />
+            </button>
+          </div>
+        ))}
+        <button className="photo-add-btn" onClick={tomarFoto} disabled={uploading}>
+          {uploading
+            ? <div className="spinner" style={{ width: 22, height: 22 }} />
+            : <><Icon name="add_a_photo" style={{ fontSize: 22, color: "var(--muted)" }} /><span>Agregar</span></>
+          }
+        </button>
+      </div>
+
+      {lightbox && (
+        <div className="photo-lightbox" onClick={() => setLightbox(null)}>
+          <button className="photo-lightbox-close" onClick={() => setLightbox(null)}>
+            <Icon name="close" />
+          </button>
+          <img src={lightbox} alt="foto ampliada" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── FERMENTACION ──────────────────────────────────────────────────────────────
 const Fermentacion = ({ goBack, activeLot, showToast }) => {
   const total = 7;
@@ -978,6 +1141,9 @@ const Fermentacion = ({ goBack, activeLot, showToast }) => {
             </div>
             <button className="action-btn-text">Manual</button>
           </div>
+        </div>
+        <div style={{ marginTop: 8 }}>
+          <PhotoGallery lotId={activeLot?.id} etapa="fermentacion" showToast={showToast} />
         </div>
         <div style={{ height: 20 }} />
       </div>
@@ -1302,6 +1468,309 @@ const Inventario = ({ goBack, activeLot, profile, showToast }) => {
           <div style={{ height: 4 }} />
         </div>
       )}
+    </div>
+  );
+};
+
+// ─── SECADO ────────────────────────────────────────────────────────────────────
+const Secado = ({ goBack, activeLot, showToast }) => {
+  const totalDays = 10;
+  const [selectedDay, setSelectedDay] = useState(1);
+  const [dayLog, setDayLog] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [tempC, setTempC] = useState("");
+  const [humedad, setHumedad] = useState("");
+  const [metodo, setMetodo] = useState("solar");
+  const [secadoData, setSecadoData] = useState(null);
+
+  const progressPct = ((selectedDay - 1) / (totalDays - 1)) * 100;
+
+  const cargarDia = useCallback(async (day) => {
+    if (!activeLot) return;
+    const { data } = await supabase
+      .from("drying_logs")
+      .select("*")
+      .eq("lot_id", activeLot.id)
+      .eq("day_number", day)
+      .maybeSingle();
+    setDayLog(data);
+    if (data) {
+      setTempC(data.temperature_c ? String(data.temperature_c) : "");
+      setHumedad(data.humidity_pct ? String(data.humidity_pct) : "");
+      setMetodo(data.method || "solar");
+    } else {
+      setTempC(""); setHumedad(""); setMetodo("solar");
+    }
+  }, [activeLot]);
+
+  const cargarResumen = useCallback(async () => {
+    if (!activeLot) return;
+    const { data } = await supabase
+      .from("drying_logs")
+      .select("*")
+      .eq("lot_id", activeLot.id)
+      .order("day_number");
+    setSecadoData(data || []);
+  }, [activeLot]);
+
+  useEffect(() => { cargarDia(selectedDay); }, [selectedDay, cargarDia]);
+  useEffect(() => { cargarResumen(); }, [cargarResumen]);
+
+  const handleGuardar = async () => {
+    if (!activeLot) return;
+    if (!humedad) { showToast("Ingresa la humedad del grano"); return; }
+    setSaving(true);
+    const { data, error } = await supabase
+      .from("drying_logs")
+      .upsert({
+        lot_id: activeLot.id,
+        day_number: selectedDay,
+        temperature_c: parseFloat(tempC) || null,
+        humidity_pct: parseFloat(humedad),
+        method: metodo,
+        recorded_at: new Date().toISOString(),
+      }, { onConflict: "lot_id,day_number" })
+      .select().single();
+    setSaving(false);
+    if (!error) {
+      setDayLog(data);
+      setSaved(true);
+      cargarResumen();
+      showToast("✓ Día " + selectedDay + " registrado");
+      setTimeout(() => setSaved(false), 2000);
+      // Si humedad <= 7%, marcar lote como secado completado
+      if (parseFloat(humedad) <= 7) {
+        await supabase.from("lots").update({ status: "secado" }).eq("id", activeLot.id);
+        showToast("🎉 ¡Secado completado! Humedad óptima alcanzada");
+      }
+    } else showToast("Error al guardar");
+  };
+
+  const humedadActual = parseFloat(humedad) || dayLog?.humidity_pct || null;
+  const humedadColor = humedadActual === null ? "var(--muted)" : humedadActual <= 7 ? "var(--success)" : humedadActual <= 10 ? "#f59e0b" : "#dc2626";
+  const humedadLabel = humedadActual === null ? "—" : humedadActual <= 7 ? "Óptima ✓" : humedadActual <= 10 ? "Casi lista" : "Alta";
+
+  // Calcular arco SVG para el gauge de humedad
+  const maxHum = 20;
+  const humPct = Math.min((humedadActual || 0) / maxHum, 1);
+  const r = 54; const cx = 64; const cy = 64;
+  const startAngle = -210; const endAngle = 30;
+  const totalAngle = endAngle - startAngle;
+  const angle = startAngle + totalAngle * humPct;
+  const toRad = (a) => (a * Math.PI) / 180;
+  const arcX = cx + r * Math.cos(toRad(angle));
+  const arcY = cy + r * Math.sin(toRad(angle));
+  const largeArc = totalAngle * humPct > 180 ? 1 : 0;
+  const startX = cx + r * Math.cos(toRad(startAngle));
+  const startY = cy + r * Math.sin(toRad(startAngle));
+
+  const diasRegistrados = secadoData?.length || 0;
+  const ultimaHumedad = secadoData?.length ? secadoData[secadoData.length - 1]?.humidity_pct : null;
+  const secadoCompleto = ultimaHumedad !== null && ultimaHumedad <= 7;
+
+  return (
+    <div className="page-enter" style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      {/* Header */}
+      <div className="page-header px">
+        <button className="header-icon-btn" onClick={goBack}><Icon name="arrow_back_ios" /></button>
+        <div style={{ textAlign: "center" }}>
+          <div className="page-title">Secado</div>
+          <div className="lot-label">Lote #{activeLot?.lot_code || "—"}</div>
+        </div>
+        <div className={`save-indicator${saved ? " visible" : ""}`}>
+          <Icon name="cloud_done" style={{ fontSize: 14 }} /> Guardado
+        </div>
+      </div>
+
+      <div className="page-scroll px">
+
+        {/* Banner completado */}
+        {secadoCompleto && (
+          <div className="completed-banner mb-6">
+            <div className="completed-icon">
+              <Icon name="check" style={{ color: "white", fontSize: 24 }} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: "#15803d" }}>¡Secado completado!</div>
+              <div style={{ fontSize: 12, color: "#16a34a", marginTop: 3 }}>
+                Humedad final: {ultimaHumedad}% · Listo para almacenamiento
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Timeline días */}
+        <div className="mb-6">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>Seguimiento diario</div>
+            <div style={{ background: "var(--primary-light)", color: "var(--primary)", padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700 }}>
+              Día {selectedDay} de {totalDays}
+            </div>
+          </div>
+          <div className="timeline-wrap">
+            <div className="timeline-track" />
+            <div className="timeline-progress" style={{ width: `${progressPct}%` }} />
+            {Array.from({ length: totalDays }, (_, i) => {
+              const d = i + 1;
+              const logged = secadoData?.find(l => l.day_number === d);
+              const done = !!logged && d < selectedDay;
+              const current = d === selectedDay;
+              return (
+                <div className="day-node" key={d} onClick={() => setSelectedDay(d)}>
+                  <div className={`day-circle${done ? " done" : ""}${current ? " current" : ""}`} style={logged && !current ? { background: "var(--primary)", color: "white" } : {}}>
+                    {logged ? <Icon name="check" style={{ fontSize: 14, color: current ? "white" : "white" }} /> : d}
+                  </div>
+                  <div className={`day-label${current ? " current-label" : ""}`}>{current ? "Hoy" : `D${d}`}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Gauge humedad */}
+        <div className="gauge-card mb-6">
+          <div className="gauge-label">Humedad del grano</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 24 }}>
+            <div className="humidity-ring">
+              <svg width="128" height="96" viewBox="0 0 128 96">
+                <path
+                  d={`M ${startX} ${startY} A ${r} ${r} 0 1 1 ${cx + r * Math.cos(toRad(endAngle))} ${cy + r * Math.sin(toRad(endAngle))}`}
+                  fill="none" stroke="#ede9e4" strokeWidth="10" strokeLinecap="round"
+                />
+                {humedadActual !== null && (
+                  <path
+                    d={`M ${startX} ${startY} A ${r} ${r} 0 ${largeArc} 1 ${arcX} ${arcY}`}
+                    fill="none" stroke={humedadColor} strokeWidth="10" strokeLinecap="round"
+                  />
+                )}
+              </svg>
+              <div className="humidity-label-center" style={{ top: 20 }}>
+                <div style={{ fontSize: 28, fontWeight: 800, color: humedadColor, lineHeight: 1 }}>
+                  {humedadActual !== null ? humedadActual + "%" : "—"}
+                </div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: humedadColor, marginTop: 2 }}>{humedadLabel}</div>
+              </div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", marginBottom: 10 }}>Rangos</div>
+              {[
+                { label: "Óptimo", range: "≤ 7%", color: "var(--success)" },
+                { label: "Aceptable", range: "7–10%", color: "#f59e0b" },
+                { label: "Alto", range: "> 10%", color: "#dc2626" },
+              ].map(r => (
+                <div key={r.label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: r.color, flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, color: "var(--muted)" }}>{r.label}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: r.color, marginLeft: "auto" }}>{r.range}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Método de secado */}
+        <div className="mb-6">
+          <div className="field-label">Método de secado</div>
+          <div style={{ display: "flex", gap: 10 }}>
+            {[
+              { id: "solar", icon: "☀️", name: "Solar" },
+              { id: "marquesina", icon: "🏗️", name: "Marquesina" },
+              { id: "mecanico", icon: "⚙️", name: "Mecánico" },
+            ].map(m => (
+              <button key={m.id} className={`metodo-btn${metodo === m.id ? " selected" : ""}`} onClick={() => setMetodo(m.id)}>
+                <span className="metodo-icon">{m.icon}</span>
+                <span className="metodo-name">{m.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Campos del día */}
+        <div className="mb-6">
+          <div className="field-label">Mediciones del día {selectedDay}</div>
+          <div className="info-grid">
+            <div className="day-stat-card">
+              <div className="day-stat-label"><Icon name="water_drop" style={{ fontSize: 14, color: "var(--primary)" }} /> Humedad</div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                <input
+                  className="day-stat-input"
+                  type="number" step="0.1" min="0" max="30"
+                  placeholder="Ej: 12.5"
+                  value={humedad}
+                  onChange={e => setHumedad(e.target.value)}
+                  style={{ color: humedadColor }}
+                />
+                <span className="day-stat-unit">%</span>
+              </div>
+            </div>
+            <div className="day-stat-card">
+              <div className="day-stat-label"><Icon name="thermostat" style={{ fontSize: 14, color: "var(--primary)" }} /> Temperatura</div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                <input
+                  className="day-stat-input"
+                  type="number" step="0.5" min="0" max="60"
+                  placeholder="Ej: 35"
+                  value={tempC}
+                  onChange={e => setTempC(e.target.value)}
+                />
+                <span className="day-stat-unit">°C</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Resumen de días registrados */}
+        {secadoData && secadoData.length > 0 && (
+          <div className="mb-6">
+            <div className="field-label">Evolución de humedad</div>
+            <div style={{ background: "#f8f7f6", border: "1.5px solid var(--border)", borderRadius: "var(--radius)", padding: "14px 16px" }}>
+              {secadoData.map((d, i) => {
+                const h = d.humidity_pct;
+                const barPct = Math.min((h / 20) * 100, 100);
+                const barColor = h <= 7 ? "var(--success)" : h <= 10 ? "#f59e0b" : "#dc2626";
+                return (
+                  <div key={d.day_number} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: i < secadoData.length - 1 ? 10 : 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", width: 28, flexShrink: 0 }}>D{d.day_number}</div>
+                    <div style={{ flex: 1, height: 8, background: "#ede9e4", borderRadius: 999, overflow: "hidden" }}>
+                      <div style={{ width: `${barPct}%`, height: "100%", background: barColor, borderRadius: 999, transition: "width 0.4s" }} />
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: barColor, width: 38, textAlign: "right", flexShrink: 0 }}>{h}%</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Resumen stats */}
+        <div className="info-grid mb-6">
+          <div className="info-card">
+            <div className="info-card-label"><Icon name="today" style={{ fontSize: 14 }} /> Días registrados</div>
+            <div className="info-card-value">{diasRegistrados} <span className="info-card-sub">de {totalDays}</span></div>
+          </div>
+          <div className="info-card">
+            <div className="info-card-label"><Icon name="water_drop" style={{ fontSize: 14 }} /> Última humedad</div>
+            <div className="info-card-value" style={{ color: ultimaHumedad !== null ? (ultimaHumedad <= 7 ? "var(--success)" : ultimaHumedad <= 10 ? "#f59e0b" : "#dc2626") : "var(--text)" }}>
+              {ultimaHumedad !== null ? ultimaHumedad + "%" : "—"}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 8, marginBottom: 8 }}>
+          <PhotoGallery lotId={activeLot?.id} etapa="secado" showToast={showToast} />
+        </div>
+        <div style={{ height: 20 }} />
+      </div>
+
+      {/* Footer */}
+      <div className="footer-actions">
+        <button className="primary-btn" onClick={handleGuardar} disabled={saving || !humedad}>
+          <Icon name={saving ? "hourglass_empty" : "save"} />
+          {saving ? "Guardando..." : `Guardar día ${selectedDay}`}
+        </button>
+        <div style={{ height: 4 }} />
+      </div>
     </div>
   );
 };
@@ -1642,9 +2111,20 @@ const Trazabilidad = () => {
     if (!key) { setError("Falta la clave."); setLoading(false); return; }
     supabase.from("inventory").select("*, lots(*, profiles(*), parcelas(*))")
       .eq("traceability_key", key).maybeSingle()
-      .then(({ data: inv, error: err }) => {
-        if (err || !inv) setError("No se encontró información para esta clave.");
-        else setData(inv);
+      .then(async ({ data: inv, error: err }) => {
+        if (err || !inv) { setError("No se encontró información para esta clave."); setLoading(false); return; }
+        // Cargar logs de secado
+        const { data: drying } = await supabase
+          .from("drying_logs")
+          .select("day_number,humidity_pct,temperature_c,method")
+          .eq("lot_id", inv.lots?.id)
+          .order("day_number");
+        const { data: photos } = await supabase
+          .from("lot_photos")
+          .select("id,url,stage")
+          .eq("lot_id", inv.lots?.id)
+          .order("created_at");
+        setData({ ...inv, drying_logs: drying || [], photos: photos || [] });
         setLoading(false);
       });
   }, []);
@@ -1750,6 +2230,47 @@ const Trazabilidad = () => {
           ["Fermentación", "6 días desde la cosecha"],
           ["Entrada al almacén", fmt(data.entry_date||data.registered_at)],
         ]}/>
+
+        {/* Secado */}
+        {data.drying_logs && data.drying_logs.length > 0 && (() => {
+          const logs = data.drying_logs;
+          const humedadFinal = logs[logs.length - 1]?.humidity_pct;
+          const metodos = [...new Set(logs.map(l => l.method))].join(", ");
+          const hColor = humedadFinal <= 7 ? "#16a34a" : humedadFinal <= 10 ? "#d97706" : "#dc2626";
+          return (
+            <div style={{marginBottom:16}}>
+              <div style={S.secTitle}>
+                <div style={{height:1,width:14,background:"#d47311"}}/>
+                Secado
+                <div style={{flex:1,height:1,background:"#ede9e4"}}/>
+              </div>
+              <table style={S.table}><tbody>
+                <tr><td style={S.tdL}>Días de secado</td><td style={{...S.tdR,color:"#1a1208"}}>{logs.length} días</td></tr>
+                <tr style={{background:"#faf9f7"}}><td style={S.tdL}>Humedad inicial</td><td style={{...S.tdR,color:"#1a1208"}}>{logs[0]?.humidity_pct}%</td></tr>
+                <tr><td style={S.tdL}>Humedad final</td><td style={{...S.tdR,color:hColor,fontWeight:800}}>{humedadFinal}% {humedadFinal<=7?"✓":""}</td></tr>
+                <tr style={{background:"#faf9f7"}}><td style={S.tdL}>Método</td><td style={{...S.tdR,color:"#1a1208",textTransform:"capitalize"}}>{metodos}</td></tr>
+              </tbody></table>
+              {/* Gráfico de evolución de humedad */}
+              <div style={{background:"white",borderRadius:12,border:"1px solid #ede9e4",padding:"14px 16px",marginTop:8}}>
+                <div style={{fontSize:10,fontWeight:700,color:"#7a6f63",textTransform:"uppercase",letterSpacing:".08em",marginBottom:12}}>Evolución de humedad</div>
+                {logs.map((d,i) => {
+                  const h = d.humidity_pct;
+                  const barPct = Math.min((h/20)*100,100);
+                  const barColor = h<=7?"#16a34a":h<=10?"#f59e0b":"#dc2626";
+                  return (
+                    <div key={d.day_number} style={{display:"flex",alignItems:"center",gap:10,marginBottom:i<logs.length-1?8:0}}>
+                      <div style={{fontSize:11,fontWeight:700,color:"#7a6f63",width:28,flexShrink:0}}>D{d.day_number}</div>
+                      <div style={{flex:1,height:7,background:"#f0ede8",borderRadius:999,overflow:"hidden"}}>
+                        <div style={{width:`${barPct}%`,height:"100%",background:barColor,borderRadius:999}}/>
+                      </div>
+                      <div style={{fontSize:12,fontWeight:800,color:barColor,width:38,textAlign:"right",flexShrink:0}}>{h}%</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
         <Sec title="Inventario final" rows={[
           ["Peso neto cacao seco", data.net_weight_kg ? data.net_weight_kg+" kg" : "---"],
           ["Sacos de fique", data.bag_count ? data.bag_count+" costales" : "---"],
@@ -1759,6 +2280,29 @@ const Trazabilidad = () => {
           ["Alejado de paredes (mín. 50 cm)", chk(data.away_from_walls), data.away_from_walls],
           ["Sin presencia de olores fuertes", chk(data.no_strong_odors), data.no_strong_odors],
         ]}/>
+
+        {/* Fotos del proceso en la carta */}
+        {(() => {
+          const todasFotos = (data.photos || []);
+          if (!todasFotos.length) return null;
+          const etapas = [...new Set(todasFotos.map(p => p.stage))];
+          return etapas.map(etapa => (
+            <div key={etapa} style={{marginBottom:16}}>
+              <div style={S.secTitle}>
+                <div style={{height:1,width:14,background:"#d47311"}}/>
+                Fotos — {etapa.charAt(0).toUpperCase()+etapa.slice(1)}
+                <div style={{flex:1,height:1,background:"#ede9e4"}}/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+                {todasFotos.filter(p=>p.stage===etapa).map(p=>(
+                  <div key={p.id} style={{aspectRatio:1,borderRadius:10,overflow:"hidden",border:"1px solid #ede9e4"}}>
+                    <img src={p.url} alt="proceso" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ));
+        })()}
 
         <div style={S.footer}>
           Documento generado por NodeBean · Sistema de Trazabilidad Digital<br/>
@@ -1896,6 +2440,7 @@ export default function App() {
   const pages = {
     panel: <Panel navigate={navigate} profile={profile} lots={lots} />,
     fermentacion: <Fermentacion goBack={goBack} activeLot={activeLot} showToast={showToast} />,
+    secado: <Secado goBack={goBack} activeLot={activeLot} showToast={showToast} />,
     inventario: <Inventario goBack={goBack} activeLot={activeLot} profile={profile} showToast={showToast} />,
     parcelas: <Parcelas userId={session.user.id} showToast={showToast} />,
     registro: (
