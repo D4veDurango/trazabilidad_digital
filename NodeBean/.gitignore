@@ -7,9 +7,18 @@
 
 # testing
 /coverage
+/cypress/videos
+/cypress/screenshots
 
 # production
 /dist
+
+# Android / Capacitor
+/android
+/ios
+*.apk
+*.aab
+*.ipa
 
 # misc
 .DS_Store
@@ -30,3 +39,7 @@ yarn-error.log*
 
 # Optional eslint cache
 .eslintcache
+
+# Supabase - solo ignorar temporales
+/supabase/.temp
+/supabase/functions/.cache
