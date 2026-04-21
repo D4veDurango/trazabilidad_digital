@@ -3,7 +3,7 @@
 
 const IonicStyles = () => (
   <style>{`
-    @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,700;0,800;1,400&family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
 
     :root {
       --primary: #c46a10;
@@ -58,6 +58,11 @@ const IonicStyles = () => (
       -moz-osx-font-smoothing: grayscale;
     }
 
+    /* Forzar fuente en TODOS los elementos interactivos */
+    input, select, textarea, button {
+      font-family: var(--font-body);
+    }
+
     /* ─── APP SHELL ─────────────────────────────────────────────────── */
     .app-shell {
       width: 100%;
@@ -69,7 +74,9 @@ const IonicStyles = () => (
       position: relative;
       overflow: hidden;
       box-shadow: 0 0 100px rgba(0,0,0,0.15);
-      /* padding bottom para dejar espacio al nav flotante */
+      /* Safe area arriba (notch/isla dinámica) */
+      padding-top: env(safe-area-inset-top, 0px);
+      /* Espacio para el nav flotante abajo */
       padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 12px) + 8px);
     }
 
@@ -87,7 +94,7 @@ const IonicStyles = () => (
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 10px 22px 6px;
+      padding: 14px 22px 8px;
       font-size: 11px;
       font-weight: 700;
       color: var(--muted);
@@ -176,10 +183,10 @@ const IonicStyles = () => (
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 14px 20px 16px;
+      padding: 16px 20px 18px;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
-      min-height: 64px;
+      min-height: 68px;
       animation: headerFade 0.3s ease both;
     }
     @keyframes headerFade {
