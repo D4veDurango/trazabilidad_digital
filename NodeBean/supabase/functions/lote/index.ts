@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const SUPABASE_URL = Deno.env.get("https://wtdhvchgxzavwujtrbgm.supabase.co")!;
-const SUPABASE_ANON_KEY = Deno.env.get("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind0ZGh2Y2hneHphdnd1anRyYmdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE3OTM5MzQsImV4cCI6MjA4NzM2OTkzNH0.Zpizh90_fNWhK4wlETRCMhaftE85vTJjnHnPgMNAUew")!;
+const SUPABASE_URL = Deno.env.get("SB_URL") || Deno.env.get("VITE_SUPABASE_URL")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SB_SERVICE_ROLE_KEY")!;
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
@@ -9,21 +9,33 @@ Deno.serve(async (req) => {
 
   if (!key) return html(errorPage("Falta la clave de trazabilidad."), 400);
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  try {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
 
-  const { data: inv } = await supabase
-    .from("inventory")
-    .select("*, lots(*, profiles(*), parcelas(*))")
-    .eq("traceability_key", key)
-    .maybeSingle();
+    const { data: inv, error } = await supabase
+      .from("inventory")
+      .select("*, lots(*, profiles(*), parcelas(*))")
+      .eq("traceability_key", key)
+      .maybeSingle();
 
-  if (!inv) return html(errorPage("No se encontró información para esta clave."), 404);
+    if (error) {
+      console.error("Supabase error:", error);
+      return html(errorPage("Error de base de datos: " + error.message), 500);
+    }
 
-  const lot     = inv.lots     ?? {};
-  const profile = lot.profiles ?? {};
-  const parcela = lot.parcelas ?? {};
+    if (!inv) return html(errorPage("No se encontró información para esta clave."), 404);
 
-  return html(buildPage({ inv, lot, profile, parcela, key }), 200);
+    const lot     = inv.lots     ?? {};
+    const profile = lot.profiles ?? {};
+    const parcela = lot.parcelas ?? {};
+
+    return html(buildPage({ inv, lot, profile, parcela, key }), 200);
+  } catch (err) {
+    console.error("Edge function error:", err);
+    return html(errorPage("Error interno del servidor."), 500);
+  }
 });
 
 function html(body: string, status: number) {

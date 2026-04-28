@@ -3,12 +3,17 @@
 
 import { supabase } from "./supabaseClient";
 
-// ⚠️ CAMBIA ESTA URL por donde está desplegada tu app (Vercel, Netlify, etc.)
 // En Capacitor, window.location.origin devuelve "capacitor://localhost" (no sirve).
 const APP_PUBLIC_URL = (() => {
   const origin = window.location.origin;
-  if (origin.startsWith("capacitor://") || origin === "http://localhost") {
-    return "https://TU-APP.vercel.app"; // ← CAMBIA ESTO
+  if (
+    origin.startsWith("capacitor://") ||
+    origin.startsWith("http://localhost") ||
+    origin.startsWith("https://localhost") ||
+    origin === "http://localhost" ||
+    origin === "https://localhost"
+  ) {
+    return "https://unrivaled-valkyrie-e3b18d.netlify.app";
   }
   return origin;
 })();
