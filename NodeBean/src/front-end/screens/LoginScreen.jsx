@@ -21,6 +21,8 @@ const LoginScreen = () => {
   return (
     <div className="login-screen page-enter">
 
+        <div class="login-top-image"></div>
+
       {/* ── Fondo decorativo ── */}
       <div className="login-bg-deco" aria-hidden="true">
         <div className="login-deco-circle login-deco-1" />

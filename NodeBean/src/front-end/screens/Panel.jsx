@@ -9,7 +9,6 @@ const Panel = ({ navigate, profile, lots }) => {
     { id: "registro",     icon: "📦", name: "Desgrane",       status: "Pendiente"     },
     { id: "fermentacion", icon: "⚗️", name: "Fermentación",   status: "EN PROGRESO", active: true },
     { id: "panel",        icon: "☀️", name: "Secado",         status: "Próxima etapa" },
-    { id: "panel",        icon: "✨", name: "Limpieza",       status: "Clasificación" },
     { id: "inventario",   icon: "🏭", name: "Almacenamiento", status: "Embolsado"     },
   ];
 

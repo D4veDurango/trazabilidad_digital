@@ -68,7 +68,7 @@ const IonicStyles = () => (
       width: 100%;
       max-width: 480px;
       min-height: 100dvh;
-      background: var(--card);
+      background: transparent;
       display: flex;
       flex-direction: column;
       position: relative;
@@ -84,10 +84,12 @@ const IonicStyles = () => (
     body.is-native { background: var(--card); align-items: flex-start; }
     body.is-native .app-shell { max-width: 100%; width: 100vw; box-shadow: none; }
 
-    @media (max-width: 520px) {
-      html, body { align-items: flex-start; background: var(--card); }
-      .app-shell { max-width: 100%; box-shadow: none; }
-    }
+    @media (min-width: 520px) {
+  .app-shell {
+    border-radius: 0;
+    margin: 0;
+  }
+}
 
     /* ─── STATUS BAR ─────────────────────────────────────────────────── */
     .status-bar {
@@ -265,26 +267,24 @@ const IonicStyles = () => (
 
     /* ─── LOGIN ──────────────────────────────────────────────────────── */
     .login-screen {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: flex-end;
-      padding: 0 clamp(20px,5vw,36px) clamp(28px,6vw,44px);
-      gap: 0;
-      position: relative;
-      overflow: hidden;
-      background: linear-gradient(180deg,
-        #0e0a05 0%,
-        #1a1008 35%,
-        #221508 60%,
-        #f5f2ee 60%,
-        #f5f2ee 100%
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 clamp(20px,5vw,36px) clamp(28px,6vw,44px);
+  gap: 0;
+  position: relative;
+  overflow: hidden;
+
+  background: #f5f2ee; /* 👈 importante */
+}
       );
-    }
 
     /* ── Círculos decorativos de fondo ── */
-    .login-bg-deco { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+    .login-bg-deco {
+  display: none;
+}
     .login-deco-circle {
       position: absolute;
       border-radius: 50%;
@@ -293,7 +293,7 @@ const IonicStyles = () => (
     .login-deco-1 {
       width: 320px; height: 320px;
       background: radial-gradient(circle, #c46a10, transparent 70%);
-      top: -60px; left: -80px;
+      login-screen: -60px; left: -80px;
       animation: deco1float 8s ease-in-out infinite;
     }
     .login-deco-2 {
@@ -317,7 +317,7 @@ const IonicStyles = () => (
     .login-mascot-wrap {
       position: relative;
       z-index: 2;
-      margin-bottom: -8px;
+      margin-bottom: -4px;
       animation: mascotEntrance 0.8s cubic-bezier(0.34,1.56,0.64,1) 0.1s both;
     }
     @keyframes mascotEntrance {
@@ -325,11 +325,11 @@ const IonicStyles = () => (
       to   { transform: translateY(0) scale(1); opacity: 1; }
     }
     .login-mascot {
-      width: clamp(180px, 48vw, 240px);
+      width: clamp(110px, 28vw, 145px);
       height: auto;
       display: block;
-      filter: drop-shadow(0 24px 48px rgba(196,106,16,0.45));
-      /* Leve flotación continua */
+      filter: drop-shadow(0 16px 32px rgba(196,106,16,0.38))
+              drop-shadow(0 4px 12px rgba(0,0,0,0.28));
       animation:
         mascotEntrance 0.8s cubic-bezier(0.34,1.56,0.64,1) 0.1s both,
         mascotFloat 4s ease-in-out 1s infinite;
@@ -339,17 +339,17 @@ const IonicStyles = () => (
       50%      { transform: translateY(-10px); }
     }
     .login-mascot-shadow {
-      width: clamp(100px, 28vw, 140px);
-      height: 18px;
-      background: rgba(0,0,0,0.25);
+      width: clamp(55px, 16vw, 80px);
+      height: 12px;
+      background: rgba(0,0,0,0.20);
       border-radius: 50%;
       margin: 0 auto;
-      filter: blur(8px);
+      filter: blur(6px);
       animation: shadowPulse 4s ease-in-out 1s infinite;
     }
     @keyframes shadowPulse {
-      0%,100% { transform: scaleX(1);    opacity: 0.25; }
-      50%      { transform: scaleX(0.82); opacity: 0.14; }
+      0%,100% { transform: scaleX(1);    opacity: 0.22; }
+      50%      { transform: scaleX(0.8);  opacity: 0.11; }
     }
 
     /* ── Card blanca inferior ── */
@@ -1162,7 +1162,7 @@ const IonicStyles = () => (
       background: none;
       border: none;
       outline: none;
-      font-family: var(--font-display);
+      font-family: var(--font-mono);
       font-size: 24px;
       font-weight: 800;
       color: var(--text);
@@ -1573,6 +1573,15 @@ const IonicStyles = () => (
         transition-duration: 0.01ms !important;
       }
     }
+    .login-top-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 45%;
+  background: url('/finca_cacao.jpeg') center/cover no-repeat;
+  z-index: 0;
+}
   `}</style>
 );
 
