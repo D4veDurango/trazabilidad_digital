@@ -317,7 +317,7 @@ const IonicStyles = () => (
     .login-mascot-wrap {
       position: relative;
       z-index: 2;
-      margin-bottom: -4px;
+      margin-bottom: -80px;
       animation: mascotEntrance 0.8s cubic-bezier(0.34,1.56,0.64,1) 0.1s both;
     }
     @keyframes mascotEntrance {
@@ -325,7 +325,7 @@ const IonicStyles = () => (
       to   { transform: translateY(0) scale(1); opacity: 1; }
     }
     .login-mascot {
-      width: clamp(110px, 28vw, 145px);
+      width: clamp(170px, 52vw, 205px);
       height: auto;
       display: block;
       filter: drop-shadow(0 16px 32px rgba(196,106,16,0.38))
