@@ -24,9 +24,27 @@ export const registerTurn = async (lotId, dayNumber, currentLog) => {
       day_number: dayNumber,
       turns_count: newTurns,
       last_turn_at: new Date().toISOString(),
-      temperature_c: currentLog?.temperature_c || 48.2,
+      temperature_c: currentLog?.temperature_c || null,
     }, { onConflict: "lot_id,day_number" })
     .select()
     .single();
+  if (error) console.error("registerTurn:", error);
+  return { data, error };
+};
+
+export const saveTemperature = async (lotId, day, temperature_c) => {
+  const existing = await getFermentationDay(lotId, day);
+  const { data, error } = await supabase
+    .from("fermentation_logs")
+    .upsert({
+      lot_id: lotId,
+      day_number: day,
+      temperature_c,
+      turns_count: existing?.turns_count || 0,
+      last_turn_at: existing?.last_turn_at || null,
+    }, { onConflict: "lot_id,day_number" })
+    .select()
+    .single();
+  if (error) console.error("saveTemperature:", error);
   return { data, error };
 };

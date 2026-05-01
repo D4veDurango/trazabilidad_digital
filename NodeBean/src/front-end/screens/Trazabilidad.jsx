@@ -31,7 +31,7 @@ const Trazabilidad = () => {
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100dvh", flexDirection: "column", gap: 16, background: "#f0ede8" }}>
       <div style={{ width: 44, height: 44, border: "3px solid rgba(212,115,17,.15)", borderTopColor: "#d47311", borderRadius: "50%", animation: "spin .8s linear infinite" }} />
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      <span style={{ color: "#7a6f63", fontSize: 14, fontWeight: 600, fontFamily: "system-ui" }}>Cargando carta...</span>
+     <span style={{ color: "#7a6f63", fontSize: 14, fontWeight: 600, fontFamily: "var(--font-body)" }}>Cargando carta...</span>
     </div>
   );
 
@@ -55,7 +55,7 @@ const Trazabilidad = () => {
   };
 
   const S = {
-    wrap: { maxWidth: 460, margin: "0 auto", padding: "20px 20px 40px", fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" },
+    wrap: { maxWidth: 460, margin: "0 auto", padding: "20px 20px 40px", fontFamily: "var(--font-body)" },
     header: { background: "linear-gradient(135deg,#1a1208,#2c1c09)", borderRadius: 20, padding: "28px 24px 22px", marginBottom: 16, color: "white", position: "relative", overflow: "hidden" },
     eye: { fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: "rgba(212,115,17,.8)", marginBottom: 6 },
     lotnum: { fontSize: 28, fontWeight: 800, marginBottom: 6 },

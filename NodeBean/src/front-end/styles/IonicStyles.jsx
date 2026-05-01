@@ -683,7 +683,7 @@ const IonicStyles = () => (
     /* ─── GRID / STAGE CARDS ─────────────────────────────────────────── */
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .stage-card {
-      background: var(--bg);
+      background: white;
       border: 1.5px solid var(--border);
       border-radius: var(--radius);
       padding: clamp(14px,3vw,18px) 12px;
@@ -696,36 +696,32 @@ const IonicStyles = () => (
       transition: all var(--transition);
     }
     .stage-card:hover {
-      border-color: rgba(196,106,16,0.3);
+      background: var(--primary-light);
+      border-color: rgba(196,106,16,0.35);
       transform: translateY(-3px);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.07);
+      box-shadow: 0 8px 24px rgba(196,106,16,0.10);
     }
     .stage-card:active { transform: scale(0.97); }
-    .stage-card.active-stage {
-      background: var(--primary-light);
-      border-color: rgba(196,106,16,0.3);
-    }
     .stage-icon {
       width: 50px;
       height: 50px;
       border-radius: 16px;
-      background: white;
+      background: var(--bg);
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 22px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.07);
-      transition: transform var(--transition-spring);
+      transition: transform var(--transition-spring), background var(--transition), box-shadow var(--transition);
     }
-    .stage-card:hover .stage-icon { transform: scale(1.12) rotate(-4deg); }
-    .stage-card.active-stage .stage-icon {
+    .stage-card:hover .stage-icon {
       background: var(--primary);
-      color: white;
       box-shadow: 0 4px 16px var(--primary-glow);
+      transform: scale(1.12) rotate(-4deg);
     }
     .stage-name { font-size: 13px; font-weight: 700; }
     .stage-status { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.04em; }
-    .stage-card.active-stage .stage-status { color: var(--primary); }
+    .stage-card:hover .stage-status { color: var(--primary); }
 
     /* ─── FERMENTACIÓN ───────────────────────────────────────────────── */
     .lot-label {
@@ -872,14 +868,16 @@ const IonicStyles = () => (
       align-items: center;
       justify-content: space-between;
       padding: 16px;
-      background: var(--primary-light);
-      border: 1.5px solid rgba(196,106,16,0.18);
+      background: white;
+      border: 1.5px solid var(--border);
       border-radius: var(--radius);
       transition: all var(--transition);
     }
-    .action-card:hover { transform: translateX(3px); border-color: rgba(196,106,16,0.35); }
-    .action-card.muted { background: white; border-color: var(--border); opacity: 0.6; }
-    .action-card.muted:hover { transform: none; }
+    .action-card:hover, .action-card:active {
+      background: var(--primary-light);
+      border-color: rgba(196,106,16,0.35);
+      transform: translateX(3px);
+    }
     .action-icon {
       width: 44px;
       height: 44px;

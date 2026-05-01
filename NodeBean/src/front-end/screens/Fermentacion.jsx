@@ -2,15 +2,18 @@
 import { useState, useEffect, useCallback } from "react";
 import { Icon } from "../components/SharedComponents";
 import PhotoGallery from "../components/PhotoGallery";
-import { getFermentationDay, registerTurn } from "../../back-end/fermentation";
+import { getFermentationDay, registerTurn, saveTemperature } from "../../back-end/fermentation";
 
 const Fermentacion = ({ goBack, activeLot, showToast }) => {
   const total    = 7;
   const maxTurns = 6;
-  const [selectedDay, setSelectedDay] = useState(1);
-  const [dayLog,      setDayLog]      = useState(null);
-  const [saving,      setSaving]      = useState(false);
-  const [saved,       setSaved]       = useState(false);
+  const [selectedDay,   setSelectedDay]   = useState(1);
+  const [dayLog,        setDayLog]        = useState(null);
+  const [saving,        setSaving]        = useState(false);
+  const [saved,         setSaved]         = useState(false);
+  const [showTempModal, setShowTempModal] = useState(false);
+  const [tempInput,     setTempInput]     = useState("");
+  const [savingTemp,    setSavingTemp]    = useState(false);
   const progressPct = ((selectedDay - 1) / (total - 1)) * 100;
 
   const loadDayLog = useCallback(async (day) => {
@@ -21,22 +24,46 @@ const Fermentacion = ({ goBack, activeLot, showToast }) => {
   useEffect(() => { loadDayLog(selectedDay); }, [selectedDay, loadDayLog]);
 
   const handleRegisterTurn = async () => {
-    if (!activeLot) return;
+    if (!activeLot) { showToast("Sin lote activo"); return; }
     setSaving(true);
     const { data, error } = await registerTurn(activeLot.id, selectedDay, dayLog);
     setSaving(false);
-    if (!error) {
-      setDayLog(data);
-      setSaved(true);
-      showToast("✓ Giro registrado");
-      setTimeout(() => setSaved(false), 2000);
-    }
+    if (error) { console.error("registerTurn error:", error); showToast("Error al registrar giro"); return; }
+    setDayLog(data);
+    setSaved(true);
+    showToast("Giro registrado");
+    setTimeout(() => setSaved(false), 2000);
   };
 
-  const turns   = dayLog?.turns_count || 0;
+  const handleSaveTemp = async () => {
+    if (!activeLot) { showToast("Sin lote activo"); return; }
+    const val = parseFloat(tempInput);
+    if (!tempInput || isNaN(val) || val < 0 || val > 100) { showToast("Temperatura invalida"); return; }
+    setSavingTemp(true);
+    const { data, error } = await saveTemperature(activeLot.id, selectedDay, val);
+    setSavingTemp(false);
+    if (error) { console.error("saveTemperature error:", error); showToast("Error al guardar"); return; }
+    setDayLog(data);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+    showToast("Temperatura registrada");
+    setShowTempModal(false);
+    setTempInput("");
+  };
+
+  const turns    = dayLog?.turns_count || 0;
   const lastTurn = dayLog?.last_turn_at
     ? new Date(dayLog.last_turn_at).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })
     : null;
+
+  const tempVal   = dayLog?.temperature_c || null;
+  const minT = 20, maxT = 80;
+  const pct       = tempVal ? Math.min(Math.max((tempVal - minT) / (maxT - minT), 0), 1) : 0.47;
+  const needleAngle = -90 + pct * 180;
+  const arcLen    = 251.2;
+  const filledLen = pct * arcLen;
+  const inRange   = tempVal && tempVal >= 45 && tempVal <= 50;
+  const tempColor = tempVal ? (inRange ? "var(--success)" : tempVal > 50 ? "#dc2626" : "#f59e0b") : "var(--primary)";
 
   return (
     <div className="page-enter" style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
@@ -79,23 +106,35 @@ const Fermentacion = ({ goBack, activeLot, showToast }) => {
           </div>
         </div>
 
-        {/* Gauge temperatura */}
-        <div className="gauge-card mb-6">
+        {/* Gauge temperatura — clickeable para registrar */}
+        <div className="gauge-card mb-6"
+          onClick={() => { if (!activeLot) return; setTempInput(tempVal ? String(tempVal) : ""); setShowTempModal(true); }}
+          style={{ cursor: activeLot ? "pointer" : "default" }}>
           <div className="gauge-label">Temperatura</div>
           <div className="gauge-svg-wrap">
             <svg viewBox="0 0 180 90" width="180" height="90">
               <path d="M 10 90 A 80 80 0 0 1 170 90" fill="none" stroke="#ede9e4" strokeWidth="14" strokeLinecap="round" />
-              <path d="M 10 90 A 80 80 0 0 1 170 90" fill="none" stroke="var(--primary)" strokeWidth="14" strokeLinecap="round"
-                strokeDasharray="219.9" strokeDashoffset="60" />
-              <line x1="90" y1="90" x2="90" y2="18" stroke="#1a1208" strokeWidth="3" strokeLinecap="round" transform="rotate(40, 90, 90)" />
+              <path d="M 10 90 A 80 80 0 0 1 170 90" fill="none" stroke={tempColor} strokeWidth="14" strokeLinecap="round"
+                strokeDasharray={`${filledLen} ${arcLen}`} strokeDashoffset="0" />
+              <line x1="90" y1="90" x2="90" y2="18" stroke="#1a1208" strokeWidth="3" strokeLinecap="round"
+                transform={`rotate(${needleAngle}, 90, 90)`} />
               <circle cx="90" cy="90" r="7" fill="#1a1208" />
             </svg>
           </div>
           <div style={{ marginTop: 8, textAlign: "center" }}>
-            <span className="temp-value">{dayLog?.temperature_c || "48.2"}</span>
+            <span className="temp-value" style={{ color: tempColor }}>{tempVal ?? "—"}</span>
             <span className="temp-unit"> °C</span>
           </div>
-          <div className="temp-ok"><Icon name="check_circle" style={{ fontSize: 14 }} /> Rango óptimo (45–50°C)</div>
+          {tempVal ? (
+            <div className="temp-ok" style={{ color: tempColor }}>
+              <Icon name={inRange ? "check_circle" : "warning"} style={{ fontSize: 14 }} />
+              {inRange ? " Rango óptimo (45–50°C)" : tempVal > 50 ? " Temperatura alta" : " Temperatura baja"}
+            </div>
+          ) : (
+            <div className="temp-ok" style={{ color: "var(--muted)" }}>
+              <Icon name="touch_app" style={{ fontSize: 14 }} /> Toca para registrar temperatura
+            </div>
+          )}
         </div>
 
         {/* Info cards */}
@@ -133,14 +172,6 @@ const Fermentacion = ({ goBack, activeLot, showToast }) => {
               {saving ? "..." : turns >= maxTurns ? "Completado" : "Registrar giro"}
             </button>
           </div>
-          <div className="action-card muted">
-            <div className="action-icon"><Icon name="thermostat" /></div>
-            <div className="action-info">
-              <div className="action-name">Registrar Temperatura</div>
-              <div className="action-sub">Auto-registro via sensor</div>
-            </div>
-            <button className="action-btn-text">Manual</button>
-          </div>
         </div>
 
         <div style={{ marginTop: 8 }}>
@@ -148,6 +179,41 @@ const Fermentacion = ({ goBack, activeLot, showToast }) => {
         </div>
         <div style={{ height: 20 }} />
       </div>
+
+      {showTempModal && (
+        <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setShowTempModal(false); }}>
+          <div className="modal-sheet">
+            <div className="modal-handle" />
+            <div className="modal-title">Temperatura — Día {selectedDay}</div>
+            <div className="space-y mb-6">
+              <div>
+                <div className="field-label">Temperatura del grano (°C)</div>
+                <div className="field-wrap">
+                  <input
+                    className="field-input"
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    placeholder="Ej: 48.5"
+                    value={tempInput}
+                    onChange={(e) => setTempInput(e.target.value)}
+                    autoFocus
+                  />
+                  <Icon name="thermostat" className="field-icon" />
+                </div>
+                <div style={{ marginTop: 8, fontSize: 12, color: "var(--muted)" }}>
+                  Rango óptimo de fermentación: 45–50°C
+                </div>
+              </div>
+            </div>
+            <button className="primary-btn" onClick={handleSaveTemp} disabled={savingTemp || !tempInput}>
+              {savingTemp ? "Guardando..." : "Guardar temperatura"} <Icon name="check" style={{ fontSize: 16 }} />
+            </button>
+            <button className="secondary-btn" style={{ marginTop: 10 }} onClick={() => setShowTempModal(false)}>Cancelar</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -6,9 +6,8 @@ const Panel = ({ navigate, profile, lots }) => {
   const activeLot = lots.find((l) => l.status === "fermentacion") || lots[0];
   const stages = [
     { id: "registro",     icon: "🌾", name: "Cosecha",        status: "Registrar"     },
-    { id: "registro",     icon: "📦", name: "Desgrane",       status: "Pendiente"     },
-    { id: "fermentacion", icon: "⚗️", name: "Fermentación",   status: "EN PROGRESO", active: true },
-    { id: "panel",        icon: "☀️", name: "Secado",         status: "Próxima etapa" },
+    { id: "fermentacion", icon: "⚗️", name: "Fermentación",   status: "Proceso", active: true },
+    { id: "panel",        icon: "☀️", name: "Secado",         status: "Humedad y temp" },
     { id: "inventario",   icon: "🏭", name: "Almacenamiento", status: "Embolsado"     },
   ];
 
