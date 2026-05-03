@@ -21,12 +21,16 @@ const Parcelas = ({ userId, showToast }) => {
   const reset = () => { setNombre(""); setHectareas(1); setArboles(100); };
 
   const handleGuardar = async () => {
-    if (!nombre.trim()) return;
+    if (!nombre.trim()) { showToast("Ingresa un nombre para la parcela"); return; }
     setSaving(true);
     const { data, error } = await createParcela(userId, { nombre, hectareas, num_arboles: arboles });
     setSaving(false);
-    if (!error) { setParcelas((p) => [data, ...p]); showToast("✓ Parcela registrada"); setShowModal(false); reset(); }
-    else showToast("Error al guardar");
+    if (error) { showToast(error.message || "Error al guardar"); return; }
+    if (!data) { showToast("Error al guardar"); return; }
+    setParcelas((p) => [data, ...p]);
+    showToast("✓ Parcela registrada");
+    setShowModal(false);
+    reset();
   };
 
   const handleEliminar = async (id) => {

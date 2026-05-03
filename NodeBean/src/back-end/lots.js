@@ -16,9 +16,9 @@ export const getOrCreateProfile = async (userId, userMeta) => {
   const { data: newProfile } = await supabase
     .from("profiles")
     .insert({
-      id: userId,
-      full_name: userMeta?.full_name || "Agricultor",
-      avatar_url: userMeta?.avatar_url || null,
+      id:          userId,
+      full_name:   userMeta?.full_name  || "Agricultor",
+      avatar_url:  userMeta?.avatar_url || null,
       producer_id: "URB-" + Math.floor(Math.random() * 9999 + 1).toString().padStart(4, "0"),
     })
     .select()
@@ -37,14 +37,26 @@ export const getLots = async (farmerId) => {
   return data || [];
 };
 
-/** Crea un nuevo lote */
+/**
+ * Crea un nuevo lote.
+ * Registra fermentation_start_at en el momento exacto de creación
+ * para calcular los horarios de volteo (H48, H72, H96, H120, H144).
+ */
 export const createLot = async (lotData) => {
-  const lotCode = `${new Date().getFullYear()}-${Math.floor(Math.random() * 900 + 100)}`;
+  const lotCode  = `${new Date().getFullYear()}-${Math.floor(Math.random() * 900 + 100)}`;
+  const now      = new Date().toISOString();
+
   const { data, error } = await supabase
     .from("lots")
-    .insert({ ...lotData, lot_code: lotCode, status: "fermentacion" })
+    .insert({
+      ...lotData,
+      lot_code:               lotCode,
+      status:                 "fermentacion",
+      fermentation_start_at:  now,
+    })
     .select()
     .single();
+
   return { data, error };
 };
 

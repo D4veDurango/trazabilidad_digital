@@ -3,8 +3,9 @@
 
 import { supabase } from "./supabaseClient";
 
-// En Capacitor, window.location.origin devuelve "capacitor://localhost" (no sirve).
-const APP_PUBLIC_URL = (() => {
+// URL pública de la aplicación - configurable via entorno
+// En producción, establece VITE_APP_URL en tu .env
+const APP_PUBLIC_URL = import.meta.env.VITE_APP_URL || (() => {
   const origin = window.location.origin;
   if (
     origin.startsWith("capacitor://") ||
@@ -13,6 +14,8 @@ const APP_PUBLIC_URL = (() => {
     origin === "http://localhost" ||
     origin === "https://localhost"
   ) {
+    // IMPORTANT: Cambia esta URL a tu dominio de producción
+    // Para desarrollo local, usa http://localhost:5173
     return "https://unrivaled-valkyrie-e3b18d.netlify.app";
   }
   return origin;

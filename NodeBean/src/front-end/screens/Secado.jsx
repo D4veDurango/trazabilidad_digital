@@ -1,251 +1,730 @@
-// ─── SECADO ────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback } from "react";
 import { Icon } from "../components/SharedComponents";
 import PhotoGallery from "../components/PhotoGallery";
-import { getDryingDay, getDryingSummary, saveDryingDay } from "../../back-end/drying";
-import { updateLotStatus } from "../../back-end/lots";
+import {
+  getDryingDay,
+  getDryingSummary,
+  saveDryingLog,
+  getDryingProgress,
+  isDryingComplete,
+} from "../../back-end/drying";
+
+const TOTAL_DAYS = 15;
+const TARGET_HUMIDITY = 7;
+const MAX_HUMIDITY = 16;
+
+const getHumidityStatus = (val) => {
+  if (val === null) {
+    return {
+      color: "var(--muted)",
+      icon: "touch_app",
+      label: "Registrar humedad",
+    };
+  }
+
+  if (val <= TARGET_HUMIDITY) {
+    return {
+      color: "var(--success)",
+      icon: "check_circle",
+      label: "Secado completo",
+    };
+  }
+
+  if (val <= 8.5) {
+    return {
+      color: "#f59e0b",
+      icon: "warning",
+      label: "Cerca del objetivo",
+    };
+  }
+
+  return {
+    color: "#2563eb",
+    icon: "water_drop",
+    label: "Secado en progreso",
+  };
+};
+
+const getDryingStatus = (humidity) => {
+  const hStatus = getHumidityStatus(humidity);
+
+  return humidity !== null
+    ? hStatus
+    : {
+      color: "var(--muted)",
+      icon: "schedule",
+      label: "Sin datos",
+    };
+};
+
+const normalizeMethod = (method) => {
+  if (!method) return "Solar";
+
+  const m = String(method).toLowerCase();
+
+  if (m === "solar") return "Solar";
+  if (m === "marquesina") return "Marquesina";
+  if (m === "mecánico" || m === "mecanico") return "Mecánico";
+
+  return "Solar";
+};
 
 const Secado = ({ goBack, activeLot, showToast }) => {
-  const totalDays = 10;
-  const [selectedDay,  setSelectedDay]  = useState(1);
-  const [dayLog,       setDayLog]       = useState(null);
-  const [saving,       setSaving]       = useState(false);
-  const [saved,        setSaved]        = useState(false);
-  const [tempC,        setTempC]        = useState("");
-  const [humedad,      setHumedad]      = useState("");
-  const [metodo,       setMetodo]       = useState("solar");
-  const [secadoData,   setSecadoData]   = useState([]);
-  const progressPct = ((selectedDay - 1) / (totalDays - 1)) * 100;
+  const [selectedDay, setSelectedDay] = useState(1);
+  const [dayLog, setDayLog] = useState(null);
+  const [summary, setSummary] = useState([]);
+  const [humidity, setHumidity] = useState("");
+  const [temperature, setTemperature] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [dryingMethod, setDryingMethod] = useState("Solar");
 
-  const cargarDia = useCallback(async (day) => {
+  const isCurrentDaySaved = !!dayLog;
+
+  const loadDay = useCallback(async () => {
     if (!activeLot) return;
-    const data = await getDryingDay(activeLot.id, day);
+
+    const data = await getDryingDay(activeLot.id, selectedDay);
+
     setDayLog(data);
-    if (data) {
-      setTempC(data.temperature_c ? String(data.temperature_c) : "");
-      setHumedad(data.humidity_pct ? String(data.humidity_pct) : "");
-      setMetodo(data.method || "solar");
-    } else { setTempC(""); setHumedad(""); setMetodo("solar"); }
+    setHumidity(data?.humidity_pct != null ? String(data.humidity_pct) : "");
+    setTemperature(
+      data?.temperature_c != null ? String(data.temperature_c) : ""
+    );
+    setDryingMethod(normalizeMethod(data?.method));
+  }, [activeLot, selectedDay]);
+
+  const loadSummary = useCallback(async () => {
+    if (!activeLot) return;
+    setSummary(await getDryingSummary(activeLot.id));
   }, [activeLot]);
 
-  const cargarResumen = useCallback(async () => {
-    if (!activeLot) return;
-    setSecadoData(await getDryingSummary(activeLot.id));
-  }, [activeLot]);
+  useEffect(() => {
+    loadDay();
+  }, [loadDay]);
 
-  useEffect(() => { cargarDia(selectedDay); }, [selectedDay, cargarDia]);
-  useEffect(() => { cargarResumen(); }, [cargarResumen]);
+  useEffect(() => {
+    loadSummary();
+  }, [loadSummary]);
 
-  const handleGuardar = async () => {
-    if (!activeLot) return;
-    if (!humedad) { showToast("Ingresa la humedad del grano"); return; }
-    setSaving(true);
-    const { data, error } = await saveDryingDay(activeLot.id, selectedDay, { temperature_c: tempC, humidity_pct: humedad, method: metodo });
-    setSaving(false);
-    if (!error) {
-      setDayLog(data);
-      setSaved(true);
-      cargarResumen();
-      showToast("✓ Día " + selectedDay + " registrado");
-      setTimeout(() => setSaved(false), 2000);
-      if (parseFloat(humedad) <= 7) {
-        await updateLotStatus(activeLot.id, "secado");
-        showToast("🎉 ¡Secado completado! Humedad óptima alcanzada");
-      }
-    } else showToast("Error al guardar");
+  useEffect(() => {
+    if (!summary.length) {
+      setSelectedDay(1);
+      return;
+    }
+
+    const latestRegisteredDay = Math.max(
+      ...summary.map((d) => d.day_number)
+    );
+
+    const nextDay = Math.min(
+      latestRegisteredDay + 1,
+      TOTAL_DAYS
+    );
+
+    setSelectedDay(nextDay);
+  }, [summary]);
+
+  const latestRegisteredDay =
+    summary.length > 0
+      ? Math.max(...summary.map((d) => d.day_number))
+      : 0;
+
+  const currentAvailableDay = Math.min(
+    latestRegisteredDay + 1,
+    TOTAL_DAYS
+  );
+
+  const goNextDay = () => {
+    if (selectedDay < TOTAL_DAYS) {
+      setSelectedDay(selectedDay + 1);
+    }
   };
 
-  const humedadActual = parseFloat(humedad) || dayLog?.humidity_pct || null;
-  const humedadColor  = humedadActual === null ? "var(--muted)" : humedadActual <= 7 ? "var(--success)" : humedadActual <= 10 ? "#f59e0b" : "#dc2626";
-  const humedadLabel  = humedadActual === null ? "—" : humedadActual <= 7 ? "Óptima ✓" : humedadActual <= 10 ? "Casi lista" : "Alta";
+  const handleSave = async () => {
+    if (isCurrentDaySaved) {
+      showToast("Ese día ya fue registrado");
+      return;
+    }
 
-  const maxHum = 20;
-  const humPct = Math.min((humedadActual || 0) / maxHum, 1);
-  const r = 54, cx = 64, cy = 64, startAngle = -210, endAngle = 30;
-  const totalAngle = endAngle - startAngle;
-  const angle  = startAngle + totalAngle * humPct;
-  const toRad  = (a) => (a * Math.PI) / 180;
-  const arcX   = cx + r * Math.cos(toRad(angle));
-  const arcY   = cy + r * Math.sin(toRad(angle));
-  const startX = cx + r * Math.cos(toRad(startAngle));
-  const startY = cy + r * Math.sin(toRad(startAngle));
-  const largeArc = totalAngle * humPct > 180 ? 1 : 0;
+    if (!humidity.trim()) {
+      showToast("Ingresa humedad");
+      return;
+    }
 
-  const diasRegistrados = secadoData?.length || 0;
-  const ultimaHumedad   = secadoData?.length ? secadoData[secadoData.length - 1]?.humidity_pct : null;
-  const secadoCompleto  = ultimaHumedad !== null && ultimaHumedad <= 7;
+    const h = parseFloat(humidity);
+    const t = temperature.trim() ? parseFloat(temperature) : null;
+
+    if (isNaN(h)) {
+      showToast("Humedad inválida");
+      return;
+    }
+
+    setSaving(true);
+
+    const { data, error } = await saveDryingLog(
+      activeLot.id,
+      selectedDay,
+      h,
+      t,
+      dryingMethod.toLowerCase()
+    );
+
+    setSaving(false);
+
+    if (error) {
+      showToast("Error al guardar");
+      return;
+    }
+
+    setDayLog(data);
+    loadSummary();
+    showToast("✓ Registro guardado");
+    goNextDay();
+  };
+
+  if (!activeLot) {
+    return (
+      <div className="page-enter">
+        <div className="page-header px">
+          <button className="header-icon-btn" onClick={goBack}>
+            <Icon name="arrow_back_ios" />
+          </button>
+
+          <div className="page-title">Secado</div>
+        </div>
+
+        <div className="page-scroll px">No hay lote activo.</div>
+      </div>
+    );
+  }
+
+  const currentHumidity = dayLog?.humidity_pct ?? null;
+  const status = getHumidityStatus(currentHumidity);
+  const progress = getDryingProgress(summary);
+  const completed = isDryingComplete(summary);
+
+  const registeredDays = summary.length;
+  const lastHumidity =
+    summary.length > 0 ? summary[summary.length - 1]?.humidity_pct : null;
+
+  const methods = ["Solar", "Marquesina", "Mecánico"];
 
   return (
-    <div className="page-enter" style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-      <div className="page-header px">
-        <button className="header-icon-btn" onClick={goBack}><Icon name="arrow_back_ios" /></button>
-        <div style={{ textAlign: "center" }}>
+    <div
+      className="page-enter"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        flex: 1,
+        overflow: "hidden",
+      }}
+    >
+      <div
+        className="page-header px"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        <button className="header-icon-btn" onClick={goBack}>
+          <Icon name="arrow_back_ios" />
+        </button>
+
+        <div style={{ flex: 1, textAlign: "center" }}>
           <div className="page-title">Secado</div>
-          <div className="lot-label">Lote #{activeLot?.lot_code || "—"}</div>
+          <div className="lot-label">Lote #{activeLot.lot_code}</div>
         </div>
-        <div className={`save-indicator${saved ? " visible" : ""}`}>
-          <Icon name="cloud_done" style={{ fontSize: 14 }} /> Guardado
-        </div>
+
+        <button
+          className="header-icon-btn"
+          onClick={() => setShowHistory(true)}
+        >
+          <Icon name="schedule" />
+        </button>
       </div>
 
       <div className="page-scroll px">
-        {secadoCompleto && (
-          <div className="completed-banner mb-6">
-            <div className="completed-icon"><Icon name="check" style={{ color: "white", fontSize: 24 }} /></div>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 15, color: "#15803d" }}>¡Secado completado!</div>
-              <div style={{ fontSize: 12, color: "#16a34a", marginTop: 3 }}>Humedad final: {ultimaHumedad}% · Listo para almacenamiento</div>
-            </div>
+        {/* resumen superior */}
+        <div
+          style={{
+            background: "white",
+            border: "1px solid var(--border)",
+            borderRadius: 16,
+            padding: 16,
+            marginBottom: 18,
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+          }}
+        >
+          <div
+            style={{
+              width: 92,
+              height: 92,
+              borderRadius: "50%",
+              border: "6px solid var(--bg-2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontWeight: 800,
+              fontSize: 18,
+            }}
+          >
+            {progress}%
           </div>
-        )}
 
-        {/* Timeline */}
-        <div className="mb-6">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <div style={{ fontWeight: 700, fontSize: 15 }}>Seguimiento diario</div>
-            <div style={{ background: "var(--primary-light)", color: "var(--primary)", padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700 }}>
-              Día {selectedDay} de {totalDays}
+          <div style={{ flex: 1 }}>
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                marginBottom: 8,
+              }}
+            >
+              Rangos
+            </div>
+
+            <div style={{ fontSize: 12, marginBottom: 4 }}>
+              <span style={{ color: "var(--success)" }}>●</span> Óptimo
+              <span style={{ float: "right", color: "var(--success)" }}>
+                ≤ 7%
+              </span>
+            </div>
+
+            <div style={{ fontSize: 12, marginBottom: 4 }}>
+              <span style={{ color: "#f59e0b" }}>●</span> Aceptable
+              <span style={{ float: "right", color: "#f59e0b" }}>
+                7–10%
+              </span>
+            </div>
+
+            <div style={{ fontSize: 12 }}>
+              <span style={{ color: "#ef4444" }}>●</span> Alto
+              <span style={{ float: "right", color: "#ef4444" }}>
+                &gt; 10%
+              </span>
             </div>
           </div>
-          <div className="timeline-wrap">
-            <div className="timeline-track" />
-            <div className="timeline-progress" style={{ width: `${progressPct}%` }} />
-            {Array.from({ length: totalDays }, (_, i) => {
-              const d       = i + 1;
-              const logged  = secadoData?.find((l) => l.day_number === d);
-              const done    = !!logged && d < selectedDay;
-              const current = d === selectedDay;
+        </div>
+
+        {/* selector día */}
+        <div className="mb-6">
+          <div className="field-label">Día de secado</div>
+
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              overflowX: "auto",
+              paddingBottom: 4,
+            }}
+          >
+            {Array.from({ length: TOTAL_DAYS }, (_, i) => {
+              const d = i + 1;
+
               return (
-                <div className="day-node" key={d} onClick={() => setSelectedDay(d)}>
-                  <div className={`day-circle${done ? " done" : ""}${current ? " current" : ""}`}
-                    style={logged && !current ? { background: "var(--primary)", color: "white" } : {}}>
-                    {done ? <Icon name="check" style={{ fontSize: 14, color: "white" }} /> : d}
-                  </div>
-                  <div className={`day-label${current ? " current-label" : ""}`}>{current ? "Hoy" : `D${d}`}</div>
-                </div>
+                <button
+                  key={d}
+                  onClick={() => {
+                    if (d !== currentAvailableDay) {
+                      showToast(
+                        "Los días anteriores solo se consultan desde historial"
+                      );
+                      return;
+                    }
+
+                    setSelectedDay(d);
+                  }}
+                  style={{
+                    minWidth: 42,
+                    height: 42,
+                    borderRadius: "50%",
+                    border: "none",
+                    fontWeight: 700,
+                    background:
+                      selectedDay === d
+                        ? "var(--primary)"
+                        : "var(--bg-2)",
+                    color:
+                      selectedDay === d ? "white" : "var(--text)",
+                  }}
+                >
+                  {d}
+                </button>
               );
             })}
           </div>
         </div>
 
-        {/* Gauge humedad */}
-        <div className="mb-6" style={{ display: "flex", alignItems: "center", gap: 16, background: "#f8f7f6", border: "1.5px solid var(--border)", borderRadius: "var(--radius)", padding: 16 }}>
-          <div className="humidity-ring" style={{ width: 128, height: 128, flexShrink: 0 }}>
-            <svg width="128" height="128" viewBox="0 0 128 128">
-              <circle cx={cx} cy={cy} r={r} fill="none" stroke="#ede9e4" strokeWidth="10" strokeLinecap="round"
-                strokeDasharray={`${2 * Math.PI * r * (totalAngle / 360)} ${2 * Math.PI * r}`}
-                transform={`rotate(${startAngle + 90} ${cx} ${cy})`} />
-              {humedadActual !== null && humedadActual > 0 && (
-                <path d={`M ${startX} ${startY} A ${r} ${r} 0 ${largeArc} 1 ${arcX} ${arcY}`}
-                  fill="none" stroke={humedadColor} strokeWidth="10" strokeLinecap="round" />
-              )}
-            </svg>
-            <div className="humidity-label-center" style={{ top: 20 }}>
-              <div style={{ fontSize: 28, fontWeight: 800, color: humedadColor, lineHeight: 1 }}>
-                {humedadActual !== null ? humedadActual + "%" : "—"}
-              </div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: humedadColor, marginTop: 2 }}>{humedadLabel}</div>
-            </div>
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", marginBottom: 10 }}>Rangos</div>
-            {[
-              { label: "Óptimo",    range: "≤ 7%",   color: "var(--success)" },
-              { label: "Aceptable", range: "7–10%",  color: "#f59e0b"        },
-              { label: "Alto",      range: "> 10%",  color: "#dc2626"        },
-            ].map((rx) => (
-              <div key={rx.label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: rx.color, flexShrink: 0 }} />
-                <span style={{ fontSize: 11, color: "var(--muted)" }}>{rx.label}</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: rx.color, marginLeft: "auto" }}>{rx.range}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Método */}
-        <div className="mb-6">
+        {/* método */}
+        <div style={{ marginBottom: 18 }}>
           <div className="field-label">Método de secado</div>
-          <div style={{ display: "flex", gap: 10 }}>
-            {[{ id: "solar", icon: "☀️", name: "Solar" }, { id: "marquesina", icon: "🏗️", name: "Marquesina" }, { id: "mecanico", icon: "⚙️", name: "Mecánico" }].map((m) => (
-              <button key={m.id} className={`metodo-btn${metodo === m.id ? " selected" : ""}`} onClick={() => setMetodo(m.id)}>
-                <span className="metodo-icon">{m.icon}</span>
-                <span className="metodo-name">{m.name}</span>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 8,
+            }}
+          >
+            {methods.map((method) => (
+              <button
+                key={method}
+                onClick={() => setDryingMethod(method)}
+                style={{
+                  background: "white",
+                  border:
+                    dryingMethod === method
+                      ? "1.5px solid var(--primary)"
+                      : "1px solid var(--border)",
+                  borderRadius: 12,
+                  padding: "12px 8px",
+                  fontWeight: 700,
+                  fontSize: 12,
+                  opacity: isCurrentDaySaved ? 0.5 : 1,
+                  cursor: isCurrentDaySaved ? "not-allowed" : "pointer",
+                }}
+              >
+                {method}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Mediciones */}
-        <div className="mb-6">
-          <div className="field-label">Mediciones del día {selectedDay}</div>
-          <div className="info-grid">
-            <div className="day-stat-card">
-              <div className="day-stat-label"><Icon name="water_drop" style={{ fontSize: 14, color: "var(--primary)" }} /> Humedad</div>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-                <input className="day-stat-input" type="number" step="0.1" min="0" max="30" placeholder="Ej: 12.5" value={humedad} onChange={(e) => setHumedad(e.target.value)} style={{ color: humedadColor }} />
-                <span className="day-stat-unit">%</span>
+        {/* mediciones */}
+        <div style={{ marginBottom: 18 }}>
+          <div className="field-label">
+            Mediciones del día {selectedDay}
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 10,
+            }}
+          >
+            <div
+              style={{
+                background: "white",
+                border: "1px solid var(--border)",
+                borderRadius: 12,
+                padding: 12,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  marginBottom: 8,
+                }}
+              >
+                💧 HUMEDAD
+              </div>
+
+              <input
+                type="number"
+                step="0.1"
+                min={0}
+                max={MAX_HUMIDITY}
+                value={humidity}
+                disabled={isCurrentDaySaved}
+                onChange={(e) => setHumidity(e.target.value)}
+                placeholder="Ej: 12.5"
+                style={{
+                  width: "100%",
+                  border: "none",
+                  outline: "none",
+                  fontSize: 26,
+                  fontWeight: 700,
+                  background: "transparent",
+                }}
+              />
+
+              <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                %
               </div>
             </div>
-            <div className="day-stat-card">
-              <div className="day-stat-label"><Icon name="thermostat" style={{ fontSize: 14, color: "var(--primary)" }} /> Temperatura</div>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-                <input className="day-stat-input" type="number" step="0.5" min="0" max="60" placeholder="Ej: 35" value={tempC} onChange={(e) => setTempC(e.target.value)} />
-                <span className="day-stat-unit">°C</span>
+
+            <div
+              style={{
+                background: "white",
+                border: "1px solid var(--border)",
+                borderRadius: 12,
+                padding: 12,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  marginBottom: 8,
+                }}
+              >
+                🌡 TEMPERATURA
+              </div>
+
+              <input
+                type="number"
+                step="0.1"
+                value={temperature}
+                disabled={isCurrentDaySaved}
+                onChange={(e) => setTemperature(e.target.value)}
+                placeholder="Ej: 35"
+                style={{
+                  width: "100%",
+                  border: "none",
+                  outline: "none",
+                  fontSize: 26,
+                  fontWeight: 700,
+                  background: "transparent",
+                }}
+              />
+
+              <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                °C
               </div>
             </div>
           </div>
         </div>
 
-        {/* Evolución */}
-        {secadoData.length > 0 && (
-          <div className="mb-6">
-            <div className="field-label">Evolución de humedad</div>
-            <div style={{ background: "#f8f7f6", border: "1.5px solid var(--border)", borderRadius: "var(--radius)", padding: "14px 16px" }}>
-              {secadoData.map((d, i) => {
-                const h = d.humidity_pct;
-                const barPct   = Math.min((h / 20) * 100, 100);
-                const barColor = h <= 7 ? "var(--success)" : h <= 10 ? "#f59e0b" : "#dc2626";
-                return (
-                  <div key={d.day_number} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: i < secadoData.length - 1 ? 10 : 0 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", width: 28, flexShrink: 0 }}>D{d.day_number}</div>
-                    <div style={{ flex: 1, height: 8, background: "#ede9e4", borderRadius: 999, overflow: "hidden" }}>
-                      <div style={{ width: `${barPct}%`, height: "100%", background: barColor, borderRadius: 999, transition: "width 0.4s" }} />
-                    </div>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: barColor, width: 38, textAlign: "right", flexShrink: 0 }}>{h}%</div>
-                  </div>
-                );
-              })}
+        {/* resumen inferior */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 10,
+            marginBottom: 18,
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              border: "1px solid var(--border)",
+              borderRadius: 12,
+              padding: 12,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                marginBottom: 8,
+              }}
+            >
+              DÍAS REGISTRADOS
+            </div>
+
+            <div style={{ fontSize: 18, fontWeight: 800 }}>
+              {registeredDays}
+            </div>
+
+            <div style={{ fontSize: 12, color: "var(--muted)" }}>
+              de {TOTAL_DAYS}
             </div>
           </div>
-        )}
 
-        <div className="info-grid mb-6">
-          <div className="info-card">
-            <div className="info-card-label"><Icon name="today" style={{ fontSize: 14 }} /> Días registrados</div>
-            <div className="info-card-value">{diasRegistrados} <span className="info-card-sub">de {totalDays}</span></div>
-          </div>
-          <div className="info-card">
-            <div className="info-card-label"><Icon name="water_drop" style={{ fontSize: 14 }} /> Última humedad</div>
-            <div className="info-card-value" style={{ color: ultimaHumedad !== null ? (ultimaHumedad <= 7 ? "var(--success)" : ultimaHumedad <= 10 ? "#f59e0b" : "#dc2626") : "var(--text)" }}>
-              {ultimaHumedad !== null ? ultimaHumedad + "%" : "—"}
+          <div
+            style={{
+              background: "white",
+              border: "1px solid var(--border)",
+              borderRadius: 12,
+              padding: 12,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                marginBottom: 8,
+              }}
+            >
+              ÚLTIMA HUMEDAD
+            </div>
+
+            <div style={{ fontSize: 18, fontWeight: 800 }}>
+              {lastHumidity != null ? `${lastHumidity}%` : "—"}
+            </div>
+
+            <div
+              style={{
+                fontSize: 12,
+                color: status.color,
+                marginTop: 4,
+              }}
+            >
+              <Icon name={status.icon} style={{ fontSize: 13 }} />{" "}
+              {status.label}
             </div>
           </div>
         </div>
 
-        <div style={{ marginTop: 8, marginBottom: 8 }}>
-          <PhotoGallery lotId={activeLot?.id} etapa="secado" showToast={showToast} />
-        </div>
-        <div style={{ height: 20 }} />
+        {/* fotos */}
+        <PhotoGallery
+          lotId={activeLot.id}
+          etapa="secado"
+          day={selectedDay}
+          editable={!summary.some((s) => s.day_number === selectedDay)}
+          showToast={showToast}
+        />
+        <div style={{ height: 100 }} />
       </div>
 
-      <div className="footer-actions">
-        <button className="primary-btn" onClick={handleGuardar} disabled={saving || !humedad}>
-          <Icon name={saving ? "hourglass_empty" : "save"} />
-          {saving ? "Guardando..." : `Guardar día ${selectedDay}`}
+      {/* botón inferior */}
+      <div
+        style={{
+          position: "sticky",
+          bottom: 0,
+          background: "var(--bg)",
+          padding: 12,
+        }}
+      >
+        <button
+          className="primary-btn"
+          onClick={handleSave}
+          disabled={saving || isCurrentDaySaved}
+        >
+          {isCurrentDaySaved
+            ? `Día ${selectedDay} registrado`
+            : saving
+              ? "Guardando..."
+              : `Guardar dia ${selectedDay}`}
         </button>
-        <div style={{ height: 4 }} />
       </div>
+
+      {/* historial */}
+      {showHistory && (
+        <div
+          className="modal-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelectedDay(currentAvailableDay);
+              setShowHistory(false);
+            }
+          }}
+        >
+          <div
+            className="modal-sheet"
+            style={{
+              maxHeight: "80vh",
+              overflowY: "auto",
+            }}
+          >
+            <div className="modal-handle" />
+            <div className="modal-title">Historial de Secado</div>
+
+            {summary.length === 0 ? (
+              <div
+                style={{
+                  padding: 20,
+                  textAlign: "center",
+                  color: "var(--muted)",
+                }}
+              >
+                No hay registros aún
+              </div>
+
+            ) : (
+              <div style={{ paddingBottom: 20 }}>
+                {summary.map((log) => {
+                  const s = getDryingStatus(log.humidity_pct);
+
+                  return (
+                    <div
+                      key={log.day_number}
+                      className="info-card"
+                      style={{
+                        marginBottom: 8,
+                        cursor: "pointer",
+                      }}
+                      onClick={() => {
+                        setSelectedDay(log.day_number);
+                        setShowHistory(false);
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            fontSize: 14,
+                          }}
+                        >
+                          Día {log.day_number}
+                        </div>
+
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 700,
+                            color: s.color,
+                          }}
+                        >
+                          {log.humidity_pct != null
+                            ? `${log.humidity_pct}%`
+                            : "—"}
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: "var(--muted)",
+                          marginTop: 6,
+                        }}
+                      >
+                        <Icon
+                          name={s.icon}
+                          style={{
+                            fontSize: 13,
+                            color: s.color,
+                          }}
+                        />{" "}
+                        {s.label}
+
+                        {log.method && (
+                          <>
+                            <span style={{ marginLeft: 8 }}>•</span>
+                            <Icon name="grid_view" style={{ fontSize: 13 }} />{" "}
+                            {normalizeMethod(log.method)}
+                          </>
+                        )}
+
+                        {log.temperature_c !== null && (
+                          <>
+                            <span style={{ marginLeft: 8 }}>•</span>
+                            <Icon
+                              name="thermostat"
+                              style={{ fontSize: 13 }}
+                            />{" "}
+                            {log.temperature_c}°C
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <button
+              className="secondary-btn"
+              onClick={() => {
+                setSelectedDay(currentAvailableDay);
+                setShowHistory(false);
+              }}
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

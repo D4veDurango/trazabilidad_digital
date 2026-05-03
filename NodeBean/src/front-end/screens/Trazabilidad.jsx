@@ -4,7 +4,6 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "../../back-end/supabaseClient";
-//import { descargar } from "C:\Users\User\Desktop\Trabajo_Grado\NodeBean\supabase\functions\lote\index.ts";
 
 const Trazabilidad = () => {
   const [data, setData] = useState(null);

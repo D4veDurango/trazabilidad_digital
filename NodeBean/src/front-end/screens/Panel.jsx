@@ -2,14 +2,63 @@
 import { supabase } from "../../back-end/supabaseClient";
 import { Icon } from "../components/SharedComponents";
 
+// Calcula el progreso del lote según su status
+const calculateProgress = (lot) => {
+  if (!lot) return 0;
+  switch (lot.status) {
+    case "cosecha": return 15;
+    case "fermentacion": return 35;
+    case "secado": return 65;
+    case "limpieza": return 80;
+    case "almacenamiento": return 95;
+    case "vendido": return 100;
+    default: return 10;
+  }
+};
+
+// Obtiene la etapa legible del status
+const getStageStatus = (status) => {
+  switch (status) {
+    case "cosecha": return "Registrar";
+    case "fermentacion": return "Proceso";
+    case "secado": return "Humedad y temp";
+    case "limpieza": return "Clasificación";
+    case "almacenamiento": return "Embolsado";
+    case "vendido": return "Vendido";
+    default: return "Pendiente";
+  }
+};
+
+// Mapeo de días de fermentación por variedad (estándar Urabá)
+// CCN51, ICS39, TSH565 = 6 días | ICS95 = 5 días
+const FERMENTATION_DAYS = {
+  'CCN51': 6,
+  'ICS95': 5,
+  'ICS39': 6,
+  'TSH565': 6,
+  'default': 6
+};
+
 const Panel = ({ navigate, profile, lots }) => {
-  const activeLot = lots.find((l) => l.status === "fermentacion") || lots[0];
+  const activeLot = lots.find((l) => l.status !== "vendido") || lots[0];
+  const progressPct = calculateProgress(activeLot);
   const stages = [
-    { id: "registro",     icon: "🌾", name: "Cosecha",        status: "Registrar"     },
-    { id: "fermentacion", icon: "⚗️", name: "Fermentación",   status: "Proceso", active: true },
-    { id: "panel",        icon: "☀️", name: "Secado",         status: "Humedad y temp" },
-    { id: "inventario",   icon: "🏭", name: "Almacenamiento", status: "Embolsado"     },
+    { id: "registro", icon: "🌾", name: "Cosecha", status: "Registrar" },
+    { id: "fermentacion", icon: "⚗️", name: "Fermentación", status: "Proceso" },
+    { id: "secado", icon: "☀️", name: "Secado", status: "Humedad y temp" },
+    { id: "inventario", icon: "🏭", name: "Almacenamiento", status: "Embolsado" },
   ];
+
+// Determina la etapa activa según el status del lote actual
+  // IMPORTANTE: el ID debe coincidir con las claves en App.jsx pages object
+  const activeStageKey = activeLot
+    ? activeLot.status === "cosecha" ? "registro"
+      : activeLot.status === "fermentacion" ? "fermentacion"
+        : activeLot.status === "secado" ? "secado"
+          : activeLot.status === "limpieza" || activeLot.status === "almacenamiento" ? "inventario"
+            : activeLot.status === "vendido" ? "inventario"
+              : "fermentacion"
+    : "registro";
 
   return (
     <div className="page-enter" style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
@@ -54,14 +103,14 @@ const Panel = ({ navigate, profile, lots }) => {
         <div className="mb-6">
           <div className="section-title">Actividad reciente</div>
           {activeLot ? (
-            <div className="active-lot-card" onClick={() => navigate("fermentacion")}>
+            <div className="active-lot-card" onClick={() => navigate(activeStageKey)}>
               <div className="ring-progress">
                 <svg viewBox="0 0 52 52" width="52" height="52">
                   <circle cx="26" cy="26" r="22" fill="none" stroke="#ede9e4" strokeWidth="5" />
                   <circle cx="26" cy="26" r="22" fill="none" stroke="var(--primary)" strokeWidth="5"
-                    strokeDasharray={`${2 * Math.PI * 22 * 0.65} ${2 * Math.PI * 22}`} strokeLinecap="round" />
+                    strokeDasharray={`${2 * Math.PI * 22 * (progressPct / 100)} ${2 * Math.PI * 22}`} strokeLinecap="round" />
                 </svg>
-                <div className="ring-text">65%</div>
+                <div className="ring-text">{progressPct}%</div>
               </div>
               <div className="lot-badge">Lote #{activeLot.lot_code}</div>
               <div className="lot-title">
@@ -85,7 +134,7 @@ const Panel = ({ navigate, profile, lots }) => {
           <div className="section-title">Etapas de trazabilidad</div>
           <div className="grid-2">
             {stages.map((s, i) => (
-              <div key={i} className={`stage-card${s.active ? " active-stage" : ""}`} onClick={() => navigate(s.id)}>
+              <div key={i} className={`stage-card${s.id === activeStageKey ? " active-stage" : ""}`} onClick={() => navigate(s.id)}>
                 <div className="stage-icon">{s.icon}</div>
                 <div className="stage-name">{s.name}</div>
                 <div className="stage-status">{s.status}</div>

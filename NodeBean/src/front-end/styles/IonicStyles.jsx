@@ -719,9 +719,23 @@ const IonicStyles = () => (
       box-shadow: 0 4px 16px var(--primary-glow);
       transform: scale(1.12) rotate(-4deg);
     }
-    .stage-name { font-size: 13px; font-weight: 700; }
+.stage-name { font-size: 13px; font-weight: 700; }
     .stage-status { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.04em; }
     .stage-card:hover .stage-status { color: var(--primary); }
+
+    /* ─── ACTIVE STAGE HIGHLIGHT ───────────────────────────────────────── */
+    .stage-card.active-stage {
+      background: var(--primary-light);
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(196,106,16,0.2), var(--shadow-primary);
+    }
+    .stage-card.active-stage .stage-icon {
+      background: var(--primary);
+      transform: scale(1.1) rotate(-4deg);
+      box-shadow: 0 4px 16px var(--primary-glow);
+    }
+    .stage-card.active-stage .stage-name { color: var(--primary); }
+    .stage-card.active-stage .stage-status { color: var(--primary); font-weight: 800; }
 
     /* ─── FERMENTACIÓN ───────────────────────────────────────────────── */
     .lot-label {

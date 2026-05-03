@@ -17,7 +17,12 @@ export const getParcelas = async (farmerId) => {
 export const createParcela = async (farmerId, { nombre, hectareas, num_arboles }) => {
   const { data, error } = await supabase
     .from("parcelas")
-    .insert({ farmer_id: farmerId, nombre: nombre.trim(), hectareas: parseFloat(hectareas), num_arboles: parseInt(num_arboles) })
+    .insert({
+      farmer_id: farmerId,
+      nombre: nombre.trim(),
+      hectareas: parseFloat(hectareas),
+      num_arboles: parseInt(num_arboles),
+    })
     .select()
     .single();
   return { data, error };
