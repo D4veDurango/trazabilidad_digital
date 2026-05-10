@@ -3,23 +3,7 @@
 
 import { supabase } from "./supabaseClient";
 
-// URL pública de la aplicación - configurable via entorno
-// En producción, establece VITE_APP_URL en tu .env
-const APP_PUBLIC_URL = import.meta.env.VITE_APP_URL || (() => {
-  const origin = window.location.origin;
-  if (
-    origin.startsWith("capacitor://") ||
-    origin.startsWith("http://localhost") ||
-    origin.startsWith("https://localhost") ||
-    origin === "http://localhost" ||
-    origin === "https://localhost"
-  ) {
-    // IMPORTANT: Cambia esta URL a tu dominio de producción
-    // Para desarrollo local, usa http://localhost:5173
-    return "https://unrivaled-valkyrie-e3b18d.netlify.app";
-  }
-  return origin;
-})();
+const APP_PUBLIC_URL = import.meta.env.VITE_APP_URL || "https://nodebean-27dlreclu-each-s-projects.vercel.app";
 
 /** Carga el inventario de un lote */
 export const getInventory = async (lotId) => {

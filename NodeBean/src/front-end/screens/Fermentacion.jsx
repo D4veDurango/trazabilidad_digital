@@ -120,6 +120,7 @@ const Fermentacion = ({ goBack, activeLot, showToast }) => {
   }, [activeLot]);
 
   useEffect(() => { loadDayLog(selectedDay); }, [selectedDay, loadDayLog]);
+  
   useEffect(() => { loadSummary(); }, [loadSummary]);
 
   useEffect(() => {
