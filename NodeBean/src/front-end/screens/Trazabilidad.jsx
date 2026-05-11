@@ -47,8 +47,8 @@ const Trazabilidad = () => {
   const parcela = lot.parcelas || {};
   const fmt = (d) => d ? new Date(d).toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" }) : "---";
   const chk = (v) => v ? "✓ Verificado" : "✗ No verificado";
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(key)}&color=1a1208&bgcolor=ffffff&margin=10`;
-
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(`https://nodebean.vercel.app/?key=${key}`)}&color=1a1208&bgcolor=ffffff&margin=10`;
+  
   const descargar = () => {
     window.print();
   };

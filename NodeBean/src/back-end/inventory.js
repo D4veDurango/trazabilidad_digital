@@ -2,8 +2,7 @@
 // CRUD de inventario final y generación de clave de trazabilidad / QR.
 
 import { supabase } from "./supabaseClient";
-
-const APP_PUBLIC_URL = import.meta.env.VITE_APP_URL || "https://nodebean-27dlreclu-each-s-projects.vercel.app";
+const APP_PUBLIC_URL = import.meta.env.VITE_APP_URL || "https://nodebean.vercel.app";
 
 /** Carga el inventario de un lote */
 export const getInventory = async (lotId) => {
