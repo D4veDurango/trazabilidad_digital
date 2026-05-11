@@ -78,6 +78,7 @@ lot_photos (id, lot_id, stage, url, file_path, created_at)
 - Node.js >= 22
 - Android Studio para compilar APK
 - Cuenta en Supabase
+- Cuenta en Vercel
 
 ### 1. Clonar e instalar dependencias
 
