@@ -219,4 +219,5 @@ Proyecto de grado. Todos los derechos reservados.
 
 ---
 
-Desarrollado por Juan David Durango Giraldo — Uraba, Antioquia, Colombia
+Desarrollado por Eiler Antonio Chaverra Hoyos - Juan David Durango Giraldo 
+Uraba - Antioquia, Colombia
